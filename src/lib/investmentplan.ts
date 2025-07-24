@@ -1,5 +1,5 @@
 "use server";
-import { CryptoPaymentOption, Deposit, DepositInput, DepositStatus, InvestmentPlan, UpdateInvestmentPlanInput } from "@/types/businesses";
+import { CryptoPaymentOption, Deposit, DepositInput, DepositStatus, InvestmentPlan, sendDepositApprovalEmail, sendDepositRejectionEmail, UpdateInvestmentPlanInput } from "@/types/businesses";
 import { getSession } from "./auth";
 import { supabase } from "./supabaseClient";
 import nodemailer from "nodemailer";
@@ -112,7 +112,7 @@ export async function initiateDeposit({
       if (typeof window !== 'undefined') {
                 window.location.href = '/signin';
               } else {
-                redirect('/signin'); // for use in server-side functions (Next.js App Router only)
+                redirect('/signin');  
               }
       return { error: 'Not authenticated' };
     }
@@ -278,7 +278,7 @@ export async function approveDeposit(depositId: string): Promise<{ success?: boo
     // 1. Verify deposit exists and is pending
     const { data: deposit, error: fetchError } = await supabase
       .from('deposits')
-      .select('status, user_id, amount, plan_id')
+      .select('status, user_id, amount, plan_id, crypto_type')
       .eq('id', depositId)
       .single();
 
@@ -294,16 +294,16 @@ export async function approveDeposit(depositId: string): Promise<{ success?: boo
       };
     }
 
-      // 2. Process referral bonus if this is the user's first deposit
-      if (deposit.amount > 0) {
-        const { error: referralError } = await processReferralBonus(deposit.user_id, deposit.amount);
-        if (referralError) {
-          console.error('Referral bonus processing failed:', referralError);
-          // Continue with deposit approval even if referral bonus fails
-        }
+    // 2. Process referral bonus if this is the user's first deposit
+    if (deposit.amount > 0) {
+      const { error: referralError } = await processReferralBonus(deposit.user_id, deposit.amount);
+      if (referralError) {
+        console.error('Referral bonus processing failed:', referralError);
+        // Continue with deposit approval even if referral bonus fails
       }
+    }
 
-    // 2. Update status to completed (trigger will handle balance update)
+    // 3. Update status to completed (trigger will handle balance update)
     const { error: updateError } = await supabase
       .from('deposits')
       .update({ 
@@ -317,8 +317,12 @@ export async function approveDeposit(depositId: string): Promise<{ success?: boo
       return { error: 'Failed to approve deposit' };
     }
 
-    // 3. Send confirmation to user
-    await sendDepositConfirmationToUser(deposit.user_id, deposit.amount, depositId);
+    // 4. Send confirmation to user
+    await sendDepositApprovalEmail(deposit.user_id, {
+      amount: deposit.amount,
+      depositId,
+      cryptoType: deposit.crypto_type
+    });
 
     return { success: true };
   } catch (err) {
@@ -327,13 +331,14 @@ export async function approveDeposit(depositId: string): Promise<{ success?: boo
   }
 }
 
+
 // Reject a deposit
 export async function rejectDeposit(depositId: string, adminNotes: string = ''): Promise<{ success?: boolean; error?: string; currentStatus?: string }> {
   try {
     // 1. Verify deposit exists and is pending
     const { data: deposit, error: fetchError } = await supabase
       .from('deposits')
-      .select('status')
+      .select('status, user_id, amount, plan_id, crypto_type')
       .eq('id', depositId)
       .single();
 
@@ -363,6 +368,14 @@ export async function rejectDeposit(depositId: string, adminNotes: string = ''):
       console.error('Rejection failed:', updateError);
       return { error: 'Failed to reject deposit' };
     }
+
+    // 3. Send rejection notification to user
+    await sendDepositRejectionEmail(deposit.user_id, {
+      amount: deposit.amount,
+      depositId,
+      cryptoType: deposit.crypto_type,
+      adminNotes
+    });
 
     return { success: true };
   } catch (err) {
@@ -570,41 +583,4 @@ export async function getAllDeposits(
   }
 }
 
-// Helper function to send deposit confirmation to user
-async function sendDepositConfirmationToUser(userId: string, amount: number, depositId: string) {
-  try {
-    const { data: user } = await supabase
-      .from('accilent_profile')
-      .select('email')
-      .eq('id', userId)
-      .single();
-
-    if (!user?.email) return;
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USERNAME,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
-
-    const mailOptions = {
-      from: `Your App Name <${process.env.EMAIL_USERNAME}>`,
-      to: user.email,
-      subject: `Deposit of $${amount} Approved`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2a52be;">Deposit Approved</h2>
-          <p>Your deposit of <strong>$${amount}</strong> has been approved and your account has been credited.</p>
-          <p>Deposit ID: ${depositId}</p>
-          <p>Thank you for investing with us!</p>
-        </div>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error('Failed to send deposit confirmation:', error);
-  }
-}
+ 

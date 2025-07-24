@@ -6,6 +6,14 @@ import nodemailer from "nodemailer";
 import { sendWithdrawalNotificationToAdmin } from "./email";
 import { redirect } from "next/navigation";
 
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USERNAME,
+    pass: process.env.EMAIL_PASSWORD
+  }
+});
+
 // Initiate a withdrawal request
 export async function initiateWithdrawal({
     amount,
@@ -111,63 +119,52 @@ export async function initiateWithdrawal({
 // Approve a withdrawal
 export async function approveWithdrawal(withdrawalId: string): Promise<{ success?: boolean; error?: string; currentStatus?: string }> {
   try {
-    // 1. Verify withdrawal exists and is pending
     const { data: withdrawal, error: fetchError } = await supabase
       .from('withdrawals')
-      .select('status, user_id, amount')
+      .select('status, user_id, amount, crypto_type')
       .eq('id', withdrawalId)
       .single();
 
     if (fetchError || !withdrawal) {
-      console.error('Withdrawal fetch failed:', fetchError);
       return { error: 'Withdrawal not found' };
     }
 
     if (withdrawal.status !== 'pending') {
-      return { 
-        error: 'Withdrawal already processed',
-        currentStatus: withdrawal.status 
-      };
+      return { error: 'Withdrawal already processed', currentStatus: withdrawal.status };
     }
 
-    // 2. Check user balance again (in case it changed since request)
     const { data: profile, error: profileError } = await supabase
       .from('accilent_profile')
-      .select('balance')
+      .select('balance, email, username')
       .eq('id', withdrawal.user_id)
       .single();
 
     if (profileError || !profile) {
-      return { error: 'Failed to fetch user balance' };
+      return { error: 'Failed to fetch user profile' };
     }
 
     if (profile.balance < withdrawal.amount) {
       return { error: 'User has insufficient balance' };
     }
 
-    // 3. Update status to processing (we'll complete after balance update)
     const { error: processingError } = await supabase
       .from('withdrawals')
-      .update({ 
+      .update({
         status: 'processing',
         processed_at: new Date().toISOString()
       })
       .eq('id', withdrawalId);
 
     if (processingError) {
-      console.error('Failed to set to processing:', processingError);
       return { error: 'Failed to process withdrawal' };
     }
 
-    // 4. Deduct from user balance
     const { error: balanceError } = await supabase.rpc('decrement_balance', {
       user_id: withdrawal.user_id,
       amount: withdrawal.amount
     });
 
     if (balanceError) {
-      console.error('Balance update failed:', balanceError);
-      // Revert status back to pending if balance update fails
       await supabase
         .from('withdrawals')
         .update({ status: 'pending' })
@@ -175,21 +172,31 @@ export async function approveWithdrawal(withdrawalId: string): Promise<{ success
       return { error: 'Failed to update user balance' };
     }
 
-    // 5. Mark withdrawal as completed
     const { error: completeError } = await supabase
       .from('withdrawals')
-      .update({ 
-        status: 'completed'
-      })
+      .update({ status: 'completed' })
       .eq('id', withdrawalId);
 
     if (completeError) {
-      console.error('Completion failed:', completeError);
       return { error: 'Failed to complete withdrawal' };
     }
 
-    // 6. Send confirmation to user
-    await sendWithdrawalConfirmationToUser(withdrawal.user_id, withdrawal.amount, withdrawalId);
+    // ✅ Send approval email
+    await transporter.sendMail({
+      from: `Accilent Finance Limited <${process.env.EMAIL_USERNAME}>`,
+      to: profile.email,
+      subject: `Withdrawal of $${withdrawal.amount} Approved`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #2a52be;">Withdrawal Approved</h2>
+          <p>Dear ${profile.username || 'Valued Customer'},</p>
+          <p>Your withdrawal of <strong>$${withdrawal.amount}</strong> in <strong>${withdrawal.crypto_type}</strong> has been successfully approved and processed.</p>
+          <p>If you have any questions, feel free to contact support.</p>
+          <br>
+          <p>Accilent Finance Limited<br><a href="mailto:accillents@gmail.com">accillents@gmail.com</a></p>
+        </div>
+      `
+    });
 
     return { success: true };
   } catch (err) {
@@ -201,29 +208,33 @@ export async function approveWithdrawal(withdrawalId: string): Promise<{ success
 // Reject a withdrawal
 export async function rejectWithdrawal(withdrawalId: string, adminNotes: string = ''): Promise<{ success?: boolean; error?: string; currentStatus?: string }> {
   try {
-    // 1. Verify withdrawal exists and is pending
     const { data: withdrawal, error: fetchError } = await supabase
       .from('withdrawals')
-      .select('status')
+      .select('status, user_id, amount, crypto_type')
       .eq('id', withdrawalId)
       .single();
 
     if (fetchError || !withdrawal) {
-      console.error('Withdrawal fetch failed:', fetchError);
       return { error: 'Withdrawal not found' };
     }
 
     if (withdrawal.status !== 'pending') {
-      return { 
-        error: 'Withdrawal already processed',
-        currentStatus: withdrawal.status 
-      };
+      return { error: 'Withdrawal already processed', currentStatus: withdrawal.status };
     }
 
-    // 2. Update status to rejected
+    const { data: profile, error: profileError } = await supabase
+      .from('accilent_profile')
+      .select('email, username')
+      .eq('id', withdrawal.user_id)
+      .single();
+
+    if (profileError || !profile) {
+      return { error: 'Failed to fetch user profile' };
+    }
+
     const { error: updateError } = await supabase
       .from('withdrawals')
-      .update({ 
+      .update({
         status: 'rejected',
         processed_at: new Date().toISOString(),
         admin_notes: adminNotes
@@ -231,9 +242,26 @@ export async function rejectWithdrawal(withdrawalId: string, adminNotes: string 
       .eq('id', withdrawalId);
 
     if (updateError) {
-      console.error('Rejection failed:', updateError);
       return { error: 'Failed to reject withdrawal' };
     }
+
+    // ✅ Send rejection email
+    await transporter.sendMail({
+      from: `Accilent Finance Limited <${process.env.EMAIL_USERNAME}>`,
+      to: profile.email,
+      subject: `Withdrawal of $${withdrawal.amount} Rejected`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #c0392b;">Withdrawal Rejected</h2>
+          <p>Dear ${profile.username || 'Valued Customer'},</p>
+          <p>Unfortunately, your withdrawal request of <strong>$${withdrawal.amount}</strong> in <strong>${withdrawal.crypto_type}</strong> was not approved.</p>
+          ${adminNotes ? `<p><strong>Reason:</strong> ${adminNotes}</p>` : ''}
+          <p>You may try again or contact support for more information.</p>
+          <br>
+          <p>Accilent Finance Limited<br><a href="mailto:accillents@gmail.com">accillents@gmail.com</a></p>
+        </div>
+      `
+    });
 
     return { success: true };
   } catch (err) {
@@ -241,6 +269,7 @@ export async function rejectWithdrawal(withdrawalId: string, adminNotes: string 
     return { error: 'An unexpected error occurred' };
   }
 }
+
 
 // Get user withdrawals
 export async function getUserWithdrawals(
@@ -397,41 +426,3 @@ export async function getAllWithdrawals(
 }
 
  
-// Helper function to send withdrawal confirmation to user
-async function sendWithdrawalConfirmationToUser(userId: string, amount: number, withdrawalId: string) {
-  try {
-    const { data: user } = await supabase
-      .from('accilent_profile')
-      .select('email')
-      .eq('id', userId)
-      .single();
-
-    if (!user?.email) return;
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USERNAME,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
-
-    const mailOptions = {
-      from: `Your App Name <${process.env.EMAIL_USERNAME}>`,
-      to: user.email,
-      subject: `Withdrawal of $${amount} Processed`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2a52be;">Withdrawal Processed</h2>
-          <p>Your withdrawal of <strong>$${amount}</strong> has been processed and sent to your wallet.</p>
-          <p>Withdrawal ID: ${withdrawalId}</p>
-          <p>Thank you for using our services!</p>
-        </div>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error('Failed to send withdrawal confirmation:', error);
-  }
-}

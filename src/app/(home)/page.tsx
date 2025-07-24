@@ -12,11 +12,13 @@ import { TestimonialSection } from "../component/home/TestimonialSection";
 import { WorkProcess } from "../component/home/WorkProcess";
 import YouTubeVideo from "../component/home/YouTubeVideo";
 import TeamSection from "../component/plan/TeamSection";
+// import TranslateBody from "../component/user/TranslateBody";
  
  
 export default function Home() {
   return (
      <div>
+  {/* <TranslateBody /> */}
   <CryptoCurrencyTicker />
   <HeroSection /> 
   <OurAdvantage />

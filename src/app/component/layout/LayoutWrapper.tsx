@@ -8,7 +8,7 @@ interface LayoutWrapperProps {
   children: React.ReactNode;
 }
 
-const HIDE_LAYOUT_PATHS = ["/admin", "/user"];
+const HIDE_LAYOUT_PATHS = ["/deri", "/user"];
 
 const LayoutWrapper: React.FC<LayoutWrapperProps> = ({ children }) => {
   const pathname = usePathname();
