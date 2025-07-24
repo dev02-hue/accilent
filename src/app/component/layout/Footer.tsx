@@ -63,7 +63,7 @@ const Footer = () => {
             </li>
             <li className="flex items-center gap-2">
               <FaEnvelope className="text-lime-400" />
-              <span>support@accilentfinlimited.com</span>
+              <span>Accilents@gmail.com</span>
             </li>
             <li className="flex items-start gap-2">
               <FaMapMarkerAlt className="text-lime-400 mt-1" />

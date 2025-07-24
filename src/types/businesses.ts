@@ -1,5 +1,8 @@
-// data/businesses.ts
+ 
+ 
 import { FaLeaf, FaBitcoin, FaChartLine } from "react-icons/fa";
+ 
+
 
 export const businesses = [
   {

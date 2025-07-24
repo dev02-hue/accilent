@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
- import { motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { FaCheck, FaTimes, FaSpinner, FaSync } from "react-icons/fa";
 import { approveDeposit, getAllDepositss, rejectDeposit } from "@/lib/investmentplan";
 
@@ -37,10 +37,11 @@ export default function DepositManager() {
       if (error) {
         setError(error);
       } else if (data) {
-        setDeposits(data);
+        // Filter to only show pending deposits
+        setDeposits(data.filter(deposit => deposit.status === "pending"));
       }
     } catch (err) {
-        console.log(err);
+      console.log(err);
       setError("Failed to fetch deposits");
     } finally {
       setLoading(false);
@@ -59,17 +60,11 @@ export default function DepositManager() {
       if (result.error) {
         setError(result.error);
       } else {
-        // Update local state
-        setDeposits(prev =>
-          prev.map(deposit =>
-            deposit.id === depositId
-              ? { ...deposit, status: "completed", processedAt: new Date().toISOString() }
-              : deposit
-          )
-        );
+        // Remove the approved deposit from the list
+        setDeposits(prev => prev.filter(deposit => deposit.id !== depositId));
       }
     } catch (err) {
-        console.log(err);
+      console.log(err);
       setError("Failed to approve deposit");
     } finally {
       setProcessingId(null);
@@ -86,20 +81,13 @@ export default function DepositManager() {
       if (result.error) {
         setError(result.error);
       } else {
-        // Update local state
-        setDeposits(prev =>
-          prev.map(deposit =>
-            deposit.id === selectedDepositId
-              ? { ...deposit, status: "rejected", processedAt: new Date().toISOString() }
-              : deposit
-          )
-        );
+        // Remove the rejected deposit from the list
+        setDeposits(prev => prev.filter(deposit => deposit.id !== selectedDepositId));
         setShowRejectModal(false);
         setRejectReason("");
       }
     } catch (err) {
-        console.log(err);
-        
+      console.log(err);
       setError("Failed to reject deposit");
     } finally {
       setProcessingId(null);
@@ -161,6 +149,7 @@ export default function DepositManager() {
                   key={deposit.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   className="border-b border-gray-200 hover:bg-gray-50"
                 >
                   <td className="py-3 px-4">{deposit.reference}</td>

@@ -1,3 +1,4 @@
+
 import AboutUs from "../component/home/AboutUs";
 import CryptoCurrencyTicker from "../component/home/CryptoCurrencyTicker";
 import FAQSection from "../component/home/FAQSection";
@@ -12,11 +13,12 @@ import { TestimonialSection } from "../component/home/TestimonialSection";
 import { WorkProcess } from "../component/home/WorkProcess";
 import YouTubeVideo from "../component/home/YouTubeVideo";
 import TeamSection from "../component/plan/TeamSection";
- 
+  
  
 export default function Home() {
   return (
      <div>
+  {/* <TranslateBody /> */}
   <CryptoCurrencyTicker />
   <HeroSection /> 
   <OurAdvantage />
