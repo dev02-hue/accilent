@@ -2,11 +2,13 @@
 import { Withdrawal, WithdrawalInput, WithdrawalStatus } from "@/types/businesses";
 import { getSession } from "./auth";
 import { supabase } from "./supabaseClient";
-import nodemailer from "nodemailer";
 import { sendWithdrawalNotificationToAdmin } from "./email";
 import { redirect } from "next/navigation";
+import nodemailer from "nodemailer";
 
-const transporter = nodemailer.createTransport({
+ 
+
+  const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USERNAME,

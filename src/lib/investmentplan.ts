@@ -1,10 +1,141 @@
 "use server";
-import { CryptoPaymentOption, Deposit, DepositInput, DepositStatus, InvestmentPlan, sendDepositApprovalEmail, sendDepositRejectionEmail, UpdateInvestmentPlanInput } from "@/types/businesses";
+import { CryptoPaymentOption, Deposit, DepositInput, DepositStatus, InvestmentPlan,   UpdateInvestmentPlanInput } from "@/types/businesses";
 import { getSession } from "./auth";
 import { supabase } from "./supabaseClient";
 import nodemailer from "nodemailer";
 import { redirect } from "next/navigation";
 import { processReferralBonus } from "./referral";
+
+  async function sendDepositApprovalEmail(userId: string, details: {
+  amount: number;
+  depositId: string;
+  cryptoType: string;
+}) {
+  try {
+    const { data: user } = await supabase
+      .from('accilent_profile')
+      .select('email, username')
+      .eq('id', userId)
+      .single();
+
+    if (!user?.email) {
+      console.error('No email found for user:', userId);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USERNAME,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    const mailOptions = {
+      from: `Accilent Finance Limited <${process.env.EMAIL_USERNAME}>`,
+      to: user.email,
+      subject: `Deposit of $${details.amount} Approved Successfully`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2a52be;">Deposit Approved</h2>
+          <p>Dear ${user.username || 'Valued Customer'},</p>
+          
+          <p>We are pleased to inform you that your deposit of 
+          <strong>$${details.amount}</strong> in <strong>${details.cryptoType}</strong> 
+          has been <strong>successfully approved</strong>.</p>
+    
+          <p><strong>Deposit ID:</strong> ${details.depositId}</p>
+    
+    
+          <p>Your funds have been credited to your account and will now begin accruing returns based on your selected investment plan.</p>
+    
+          <p>If you have any questions or require further assistance, please don’t hesitate to contact us.</p>
+    
+          <p style="margin-top: 30px;">
+            <strong>Accilent Finance Limited</strong><br>
+            <a href="mailto:accillents@gmail.com">accillents@gmail.com</a><br>
+            <em>Empowering Smart Investments</em>
+          </p>
+        </div>
+      `,
+    };
+    
+
+    await transporter.sendMail(mailOptions);
+    console.log('Deposit approval email sent to:', user.email);
+  } catch (error) {
+    console.error('Failed to send deposit approval email:', error);
+  }
+}
+
+// Helper function to send deposit rejection email
+ async function sendDepositRejectionEmail(userId: string, details: {
+  amount: number;
+  depositId: string;
+  cryptoType: string;
+  adminNotes: string;
+}) {
+  try {
+    const { data: user } = await supabase
+      .from('accilent_profile')
+      .select('email, username')
+      .eq('id', userId)
+      .single();
+
+    if (!user?.email) {
+      console.error('No email found for user:', userId);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USERNAME,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    const mailOptions = {
+      from: `Accilent Finance Limited <${process.env.EMAIL_USERNAME}>`,
+      to: user.email,
+      subject: `Withdrawal of $${details.amount} Approved Successfully`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2a52be;">Withdrawal Approved</h2>
+          <p>Dear ${user.username || 'Valued Customer'},</p>
+          
+          <p>We are pleased to inform you that your withdrawal request of 
+          <strong>$${details.amount}</strong> in <strong>${details.cryptoType}</strong> 
+          has been <strong>successfully approved and processed</strong>.</p>
+    
+          <p><strong>Withdrawal ID:</strong> ${details.depositId || details.depositId}</p>
+    
+          ${details.adminNotes ? `
+            <p><strong>Note from our team:</strong> ${details.adminNotes}</p>
+          ` : ''}
+    
+          <p>The funds have been sent to your designated wallet address. Depending on the blockchain network, it may take a short time for the transaction to reflect.</p>
+    
+          <p>If you have any questions or require further clarification, feel free to reach out to our support team.</p>
+    
+          <p style="margin-top: 30px;">
+            <strong>Accilent Finance Limited</strong><br>
+            <a href="mailto:accillents@gmail.com">accillents@gmail.com</a><br>
+            <em>Empowering Smart Investments</em>
+          </p>
+        </div>
+      `,
+    };
+    
+    
+
+    await transporter.sendMail(mailOptions);
+    console.log('Deposit rejection email sent to:', user.email);
+  } catch (error) {
+    console.error('Failed to send deposit rejection email:', error);
+  }
+}
+
  
 export async function getInvestmentPlans(): Promise<{ data?: InvestmentPlan[]; error?: string }> {
   try {
