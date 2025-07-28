@@ -159,3 +159,18 @@ export  type UpdateProfileInput = {
 //   phoneNumber: string
 // }
 
+export interface Loan {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  amount: number;
+  interest_rate: number;
+  interest_amount: number;
+  total_repayment: number;
+  total_repayment_amount: number;
+  status: string;
+  reference: string;
+  purpose: string;
+  created_at: string;
+  // Add any other fields you have
+}

@@ -7,8 +7,9 @@ import { Deposit, DepositStatus, Profile, UpdateProfileInput, UpdateUserProfileI
 import { redirect } from "next/navigation";
 
 
-// Add this type definition near your other type definitions
-type ProfileData = {
+
+
+ type ProfileData = {
     name: string
     username: string
     email: string
