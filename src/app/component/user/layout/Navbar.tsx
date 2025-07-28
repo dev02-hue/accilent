@@ -79,6 +79,7 @@ const navItems = [
     name: "Deposit",
     icon: <FiDollarSign className="mr-2" />,
     dropdown: [
+      { name: "Loan Service", href: "/user/loan" },
       { name: "All Deposit", href: "/user/deposit-all" },
       { name: "New Deposit", href: "/user/deposit-new" },
     ],
